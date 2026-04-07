@@ -59,11 +59,12 @@ readonly version_sc=master   # unmaintained since 2016
 readonly version_scudo=main
 readonly version_sg=master   # ~unmaintained since 2021
 readonly version_sm=master   # ~unmaintained since 2017
-readonly version_sn=0.7.2
+readonly version_sn=0.7.4
 readonly version_tbb=v2021.9.0
-readonly version_tc=gperftools-2.16.90
-readonly version_tcg=98fd24303c7b5ef5e30da625f11fb623a5e038b6 # 2025-07-18
+readonly version_tc=gperftools-2.18
+readonly version_tcg=81f4e44f23f2936303f9404fee7315119b9df623 # 2026-02-23
 readonly version_yal=main
+readonly version_rmalloc=master
 
 # benchmark versions
 readonly version_redis=6.2.7
@@ -104,6 +105,7 @@ setup_tbb=0
 setup_tc=0
 setup_tcg=0
 setup_yal=0
+setup_rmalloc=0
 
 # bigger benchmarks
 setup_bench=0
@@ -147,6 +149,7 @@ while : ; do
         setup_tbb=$flag_arg
         setup_tc=$flag_arg
         setup_yal=$flag_arg
+        setup_rmalloc=$flag_arg
         if [ -z "$darwin" ]; then
           setup_tcg=$flag_arg       # lacking 'malloc.h'
           setup_dh=$flag_arg
@@ -176,6 +179,8 @@ while : ; do
         ;;
     bench)
         setup_bench=$flag_arg;;
+    rmalloc)
+        setup_rmalloc=$flag_arg;;
     ff)
         setup_ff=$flag_arg;;
     fg)
@@ -280,6 +285,7 @@ while : ; do
         echo "  tc                           setup tcmalloc ($version_tc)"
         echo "  tcg                          setup Google's tcmalloc ($version_tcg)"
         echo "  yal                          setup yalloc ($version_yal)"
+        echo "  rmalloc                      setup rmalloc($version_rmalloc)"
         echo ""
         echo "  bench                        build all local benchmarks"
         echo "  lean                         setup lean 3 benchmark"
@@ -467,6 +473,13 @@ if test "$setup_packages" = "1"; then
     bazelisk gflags snappy python-six
     # python-six is needed for gyp which is used by sc
   fi
+fi
+
+if test "$setup_rmalloc" = "1"; then
+  checkout rmalloc $version_rmalloc https://github.com/newell-romario/rmalloc
+  cmake  -DCMAKE_BUILD_TYPE=RELEASE .
+  make
+  popd
 fi
 
 if test "$setup_hm" = "1"; then
