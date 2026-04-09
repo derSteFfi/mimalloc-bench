@@ -791,6 +791,9 @@ fi
 if test "$setup_lean" = "1"; then
   phase "build lean $version_lean"
   checkout lean $version_lean https://github.com/leanprover-community/lean
+  set +e
+  patch -p1 -N -r- < ../../patches/lean.patch
+  set -e
   mkdir -p out/release
   cd out/release
   env CC=gcc CXX="g++" cmake ../../src -DCUSTOM_ALLOCATORS=OFF -DLEAN_EXTRA_CXX_FLAGS="-w" -DCMAKE_POLICY_VERSION_MINIMUM=3.5
