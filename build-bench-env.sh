@@ -793,7 +793,7 @@ if test "$setup_lean" = "1"; then
   checkout lean $version_lean https://github.com/leanprover-community/lean
   mkdir -p out/release
   cd out/release
-  env CC=gcc CXX="g++" cmake ../../src -DCUSTOM_ALLOCATORS=OFF -DLEAN_EXTRA_CXX_FLAGS="-w"
+  env CC=gcc CXX="g++" cmake ../../src -DCUSTOM_ALLOCATORS=OFF -DLEAN_EXTRA_CXX_FLAGS="-w" -DCMAKE_POLICY_VERSION_MINIMUM=3.5
   echo "make -j$procs"
   make -j $procs
   rm -rf ./tests/  # we don't need tests
