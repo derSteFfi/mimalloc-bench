@@ -216,6 +216,10 @@ function alloc_is_installed { # <path> : path to .$extso-file
 }
 
 function alloc_run_add {  # <allocator>   :add to runnable
+  if test "$1" = "sys"; then
+    alloc_run="$alloc_run $1"
+    return
+  fi
   if alloc_is_installed $(get_so_path "$1"); then
     alloc_run="$alloc_run $1"
   fi
