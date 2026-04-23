@@ -198,7 +198,7 @@ function get_so_path () { # <alloc> : name of alloc to look up in alloc_libs
     entry_name="${entry%=*}"
     entry_lib="${entry#*=}"
     if test "$entry_name" = "$1"; then
-      echo "$entry_lib"
+      echo "$entry_lib" | cut -d: -f1
     fi
   done
 }
