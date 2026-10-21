@@ -220,6 +220,20 @@ function alloc_is_installed { # <path> : path to .$extso-file
   return 0
 }
 
+function list_installed {  # print all allocators whose library exists
+                           # (only a file check here; the LD_PRELOAD probe in
+                           # alloc_is_installed would be too slow for --help)
+  printf "  %-9s %s\n" "sys:" "$libc"
+  for alloc in $alloc_all; do
+    if test "$alloc" != "sys"; then
+      lib=$(get_so_path "$alloc")
+      if test -n "$lib" -a -f "$lib"; then
+        printf "  %-9s %s\n" "$alloc:" "${lib#$localdevdir/}"
+      fi
+    fi
+  done
+}
+
 function alloc_run_add {  # <allocator>   :add to runnable
   if test "$1" = "sys"; then
     alloc_run="$alloc_run $1"
@@ -436,8 +450,7 @@ while : ; do
             echo "  $alloc_secure"
             echo ""
             echo "installed allocators:"
-            echo "  sys:    $libc"
-            column -t "$localdevdir/versions.txt" | sed 's/^/  /'
+            list_installed
             echo ""
             exit 0;;
         *) warning "unknown option \"$1\"." 1>&2
@@ -468,8 +481,7 @@ if test "$verbose" = "yes"; then
   echo "  $alloc_all"
   echo ""
   echo "installed allocators:"
-  echo "  sys:    $libc"
-  column -t "$localdevdir/versions.txt" | sed 's/^/  /'
+  list_installed
   echo ""
 fi
 
