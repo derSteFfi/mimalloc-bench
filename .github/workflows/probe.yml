@@ -34,7 +34,7 @@ jobs:
           build-args: |
             platform=ubuntu
             allocator=ff
-            benchs=cfrac espresso barnes gs rocksdb
+            benchs=cfrac barnes gs
             repeats=1
           cache-from: type=gha,scope=buildkit_ubuntu
           cache-to: type=gha,mode=max,scope=buildkit_ubuntu

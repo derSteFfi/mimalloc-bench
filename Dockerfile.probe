@@ -40,20 +40,14 @@ ARG repeats=1
 RUN ./build-bench-env.sh $allocator
 
 # DEBUG PROBE (temporary, for investigating the ff/gs "cannot be preloaded"
-# failures seen in CI): bracket the benchmark step with allocator-directory
-# listings, a forced-preload gs run, and kernel/security context snapshots.
-RUN echo "== DEBUG pre-bench: allocator dir =="; ls -la extern/$allocator/; \
-    echo "== DEBUG pre-bench: preload probe =="; \
-    LD_PRELOAD=$(ls extern/$allocator/*.so 2>/dev/null | head -1) gs -dBATCH -dNODISPLAY extern/large.pdf 2>&1 | head -2; \
-    echo "== DEBUG pre-bench: process context =="; grep -E "Seccomp|NoNewPrivs|CapEff" /proc/self/status; \
-    cat /sys/kernel/security/apparmor/profiles 2>&1 | head -5; \
-    dmesg 2>/dev/null | tail -4
+# failures seen in CI): bracket the benchmark step with the diagnostic script
+# ci-gs-probe.sh, which reports the security context of the sandbox and of the
+# gs process itself and compares gs with other binaries.
+RUN bash ./ci-gs-probe.sh $allocator
 
 # Run benchmarks
 WORKDIR /mimalloc-bench/out/bench
 RUN ../../bench.sh $allocator $benchs -r=$repeats; rc=$?; \
-    echo "== DEBUG post-bench: bench rc=$rc, allocator dir =="; ls -la ../../extern/$allocator/; \
-    echo "== DEBUG post-bench: preload probe =="; \
-    LD_PRELOAD=$(ls ../../extern/$allocator/*.so 2>/dev/null | head -1) gs -dBATCH -dNODISPLAY ../../extern/large.pdf 2>&1 | head -2; \
-    dmesg 2>/dev/null | grep -iE "denied|oom|segfault|truncat" | tail -6; \
+    echo "== bench exited with rc=$rc =="; \
+    bash /mimalloc-bench/ci-gs-probe.sh $allocator; \
     exit $rc
