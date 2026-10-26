@@ -1,0 +1,40 @@
+name: CI probe (ubuntu, ff)
+
+# Throwaway workflow for investigating the ff/gs "cannot be preloaded"
+# failures observed in "Build and run everything": the allocator library is
+# freshly built and present, yet ld.so reports ENOENT during gs. This runs
+# one platform, one allocator, a reduced bench set, and brackets the
+# benchmark step with filesystem/preload/security-context probes
+# (see Dockerfile.probe). Uses the same GHA cache scope as the main
+# workflow to reproduce identical cache conditions.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build allocator and run probes + benchmarks in Docker
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.probe
+          push: false
+          target: benchmark
+          build-args: |
+            platform=ubuntu
+            allocator=ff
+            benchs=cfrac espresso barnes gs rocksdb
+            repeats=1
+          cache-from: type=gha,scope=buildkit_ubuntu
+          cache-to: type=gha,mode=max,scope=buildkit_ubuntu
