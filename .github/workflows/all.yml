@@ -14,6 +14,8 @@ on:
 
 jobs:
   build-and-run:
+    # skip the heavy matrix on the throwaway ci_ff_gs_probe branch
+    if: github.ref_name != 'ci_ff_gs_probe' && github.head_ref != 'ci_ff_gs_probe'
     strategy:
       matrix:
         platform: [ubuntu, alpine, fedora]
