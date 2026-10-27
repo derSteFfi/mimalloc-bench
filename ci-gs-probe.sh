@@ -45,6 +45,10 @@ LD_PRELOAD=/tmp/probe-lib.so gs -dBATCH -dNODISPLAY "$pdf" 2>&1 | tail -3
 cp -f "$(command -v gs)" /tmp/gscopy 2>/dev/null
 echo "--- copy of gs at another path, same preload and input"
 LD_PRELOAD="$lib" /tmp/gscopy -dBATCH -dNODISPLAY "$pdf" 2>&1 | tail -3
+LD_PRELOAD="$lib" /tmp/gscopy -dNOPAUSE -dBATCH -dNODISPLAY -sDEVICE=nullpage - < <(sleep 5) >/dev/null 2>&1 &
+cpid=$!; sleep 1
+echo "    label=$(cat /proc/$cpid/attr/current 2>&1) mappings-of-lib=$(grep -c -a "$libname" /proc/$cpid/maps 2>/dev/null)  <- a private copy of gs runs unconfined, so it is a candidate workaround"
+kill $cpid 2>/dev/null; wait 2>/dev/null
 echo "--- preload only, no input file: library from the repo"
 LD_PRELOAD="$lib" gs -dBATCH -dNOPAUSE -dNODISPLAY -q -c quit 2>&1 | tail -2
 echo "    (no ld.so error above means the preload was accepted)"

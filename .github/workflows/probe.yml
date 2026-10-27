@@ -1,16 +1,22 @@
 name: CI probe (ubuntu, ff)
 
-# Throwaway workflow for investigating the ff/gs "cannot be preloaded"
-# failures observed in "Build and run everything". Established so far: the
-# library is present and readable by every other benchmark, but the gs
-# process runs under an AppArmor profile named "gs" that the runner host
-# attaches to /usr/bin/gs, which denies it read access outside its allowed
-# paths (ld.so then reports the generic "cannot be preloaded (cannot open
-# shared object file)"). This workflow now (1) identifies that profile and
-# the package that owns it on the runner host, (2) unloads it, and (3) runs
-# the reduced bench again with the in-container probes from ci-gs-probe.sh -
-# the gs row must then match the real-ff fingerprint (about 2 s, 1.0 M
-# page faults) if unloading the profile is the fix.
+# Throwaway workflow for the ff/gs "cannot be preloaded" failures observed in
+# "Build and run everything". Resolved: Ubuntu 26.04 (what ubuntu-latest is
+# now) ships /etc/apparmor.d/gs from the apparmor package, an AppArmor profile
+# named "gs" attached to /usr/bin/gs. It allows reads only of the system
+# library and share dirs, owner-owned documents with known extensions under
+# $HOME, /mnt or /media, and owner files under /tmp - so the allocator library and
+# extern/large.pdf are both denied to gs, ld.so reports the generic "cannot be
+# preloaded (cannot open shared object file)", gs dies, and bench.sh still
+# records a row with the system allocator. The Docker build sandbox is
+# unconfined (privileged buildx worker), which is why the host profile applies
+# to processes inside it.
+#
+# This workflow now (1) prints the profile and its owning package, (2) unloads
+# it, and (3) runs the reduced bench with the in-container probes from
+# ci-gs-probe.sh. probe_run keeps the probe and benchmark steps out of the
+# build cache. With the profile unloaded, the gs row must show the real-ff
+# fingerprint (about 2 s, 1.0 M page faults) instead of 0.04 s / 3 k faults.
 
 on:
   push:
@@ -30,16 +36,12 @@ jobs:
 
       - name: Identify the host profile attached to gs
         run: |
-          echo "== aa-status =="
-          sudo aa-status | head -12 || true
           echo "== loaded profiles =="
           sudo cat /sys/kernel/security/apparmor/profiles | sort | head -40
-          echo "== profile files that declare a gs profile =="
+          echo "== profile files declaring a gs profile =="
           sudo grep -rlE '^[[:space:]]*profile[[:space:]]+gs([[:space:]({]|$)' \
-            /etc/apparmor.d /var/lib/snapd/apparmor /usr/share/apparmor 2>/dev/null |
-            tee /tmp/gs-profiles || true
-          sudo find /etc /var/lib/snapd /usr/share -path '*apparmor*' -name '*gs*' 2>/dev/null |
-            tee -a /tmp/gs-profiles || true
+            /etc/apparmor.d /var/lib/snapd/apparmor 2>/dev/null |
+            grep -av '/abstractions/\|/tunables/' | tee /tmp/gs-profiles || true
           for f in $(sort -u /tmp/gs-profiles); do
             echo "== $f (owner: $(dpkg -S "$f" 2>&1 | head -1))"
             sudo cat "$f"
@@ -47,7 +49,7 @@ jobs:
           echo "== docker sandbox context =="
           docker info --format 'SecurityOptions: {{.SecurityOptions}}'
           docker ps --format '{{.Names}}' |
-            xargs -r -I{} docker inspect --format '{}: privileged={{.HostConfig.Privileged}} security={{.HostConfig.SecurityOpt}}' {} || true
+            xargs -r -I{} docker inspect --format '{}: privileged={{.HostConfig.Privileged}} security={{.HostConfig.SecurityOpt}}' || true
 
       - name: Unload the gs profile on the host
         run: |
@@ -56,7 +58,8 @@ jobs:
             sudo apparmor_parser -R "$f" || true
           done
           echo "== profiles after unload (gs should be gone) =="
-          sudo cat /sys/kernel/security/apparmor/profiles | sort | grep -iE '(^|[^a-z])gs[[:space:]]' || echo "  no gs profile loaded"
+          sudo cat /sys/kernel/security/apparmor/profiles | sort |
+            grep -iE '(^|[^a-z])gs[[:space:]]' || echo "  no gs profile loaded"
 
       - name: Build allocator and run probes + benchmarks in Docker
         uses: docker/build-push-action@v7
@@ -70,5 +73,6 @@ jobs:
             allocator=ff
             benchs=cfrac barnes gs
             repeats=1
+            probe_run=${{ github.run_id }}-${{ github.run_attempt }}
           cache-from: type=gha,scope=buildkit_ubuntu
           cache-to: type=gha,mode=max,scope=buildkit_ubuntu

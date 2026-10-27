@@ -36,6 +36,9 @@ WORKDIR /mimalloc-bench
 ARG allocator=mi
 ARG benchs=cfrac
 ARG repeats=1
+# Bumped by the probe workflow so that the probe and benchmark steps are never
+# served from the build cache (the base stages stay cached).
+ARG probe_run=0
 
 RUN ./build-bench-env.sh $allocator
 
@@ -43,11 +46,11 @@ RUN ./build-bench-env.sh $allocator
 # failures seen in CI): bracket the benchmark step with the diagnostic script
 # ci-gs-probe.sh, which reports the security context of the sandbox and of the
 # gs process itself and compares gs with other binaries.
-RUN bash ./ci-gs-probe.sh $allocator
+RUN echo "probe run ${probe_run}" && bash ./ci-gs-probe.sh $allocator
 
 # Run benchmarks
 WORKDIR /mimalloc-bench/out/bench
-RUN ../../bench.sh $allocator $benchs -r=$repeats; rc=$?; \
+RUN echo "probe run ${probe_run}" && ../../bench.sh $allocator $benchs -r=$repeats; rc=$?; \
     echo "== bench exited with rc=$rc =="; \
     bash /mimalloc-bench/ci-gs-probe.sh $allocator; \
     exit $rc
