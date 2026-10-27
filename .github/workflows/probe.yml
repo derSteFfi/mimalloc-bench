@@ -1,12 +1,16 @@
 name: CI probe (ubuntu, ff)
 
 # Throwaway workflow for investigating the ff/gs "cannot be preloaded"
-# failures observed in "Build and run everything": the allocator library is
-# freshly built and present, yet ld.so reports ENOENT during gs. This runs
-# one platform, one allocator, a reduced bench set, and brackets the
-# benchmark step with filesystem/preload/security-context probes
-# (see Dockerfile.probe). Uses the same GHA cache scope as the main
-# workflow to reproduce identical cache conditions.
+# failures observed in "Build and run everything". Established so far: the
+# library is present and readable by every other benchmark, but the gs
+# process runs under an AppArmor profile named "gs" that the runner host
+# attaches to /usr/bin/gs, which denies it read access outside its allowed
+# paths (ld.so then reports the generic "cannot be preloaded (cannot open
+# shared object file)"). This workflow now (1) identifies that profile and
+# the package that owns it on the runner host, (2) unloads it, and (3) runs
+# the reduced bench again with the in-container probes from ci-gs-probe.sh -
+# the gs row must then match the real-ff fingerprint (about 2 s, 1.0 M
+# page faults) if unloading the profile is the fix.
 
 on:
   push:
@@ -23,6 +27,36 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      - name: Identify the host profile attached to gs
+        run: |
+          echo "== aa-status =="
+          sudo aa-status | head -12 || true
+          echo "== loaded profiles =="
+          sudo cat /sys/kernel/security/apparmor/profiles | sort | head -40
+          echo "== profile files that declare a gs profile =="
+          sudo grep -rlE '^[[:space:]]*profile[[:space:]]+gs([[:space:]({]|$)' \
+            /etc/apparmor.d /var/lib/snapd/apparmor /usr/share/apparmor 2>/dev/null |
+            tee /tmp/gs-profiles || true
+          sudo find /etc /var/lib/snapd /usr/share -path '*apparmor*' -name '*gs*' 2>/dev/null |
+            tee -a /tmp/gs-profiles || true
+          for f in $(sort -u /tmp/gs-profiles); do
+            echo "== $f (owner: $(dpkg -S "$f" 2>&1 | head -1))"
+            sudo cat "$f"
+          done
+          echo "== docker sandbox context =="
+          docker info --format 'SecurityOptions: {{.SecurityOptions}}'
+          docker ps --format '{{.Names}}' |
+            xargs -r -I{} docker inspect --format '{}: privileged={{.HostConfig.Privileged}} security={{.HostConfig.SecurityOpt}}' {} || true
+
+      - name: Unload the gs profile on the host
+        run: |
+          for f in $(sort -u /tmp/gs-profiles); do
+            sudo ln -sf "$f" /etc/apparmor.d/disable/ 2>/dev/null
+            sudo apparmor_parser -R "$f" || true
+          done
+          echo "== profiles after unload (gs should be gone) =="
+          sudo cat /sys/kernel/security/apparmor/profiles | sort | grep -iE '(^|[^a-z])gs[[:space:]]' || echo "  no gs profile loaded"
 
       - name: Build allocator and run probes + benchmarks in Docker
         uses: docker/build-push-action@v7
