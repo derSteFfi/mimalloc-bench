@@ -212,9 +212,14 @@ function alloc_is_installed { # <path> : path to .$extso-file
   if [ ! -f "$1" ]; then
     return 1
   fi
-  tmp=$(LD_PRELOAD="$1" /bin/true &>/dev/null)
+  # macos ignores a broken DYLD_INSERT_LIBRARIES silently and has no /proc
+  if test -n "$darwin"; then
+    return 0
+  fi
+  err=$(LD_PRELOAD="$1" sh -c "grep -qF \"${1##*/}\" /proc/self/maps" 2>&1 >/dev/null)
   if [ "$?" -ne 0 ]; then
     echo "failed to LD_PRELOAD a selected allocator: $1"
+    test -n "$err" && echo "$err"
     return 1
   fi
   return 0
